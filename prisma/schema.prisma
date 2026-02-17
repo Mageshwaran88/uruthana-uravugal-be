@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model User {
+  id               String    @id @default(uuid())
+  email            String?   @unique
+  mobile           String?   @unique
+  passwordHash     String?
+  name             String
+  avatarUrl        String?   @default("/avatars/default.png")
+  role             Role      @default(USER)
+
+  emailVerifiedAt  DateTime?
+  mobileVerifiedAt DateTime?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  refreshTokens    RefreshToken[]
+  passwordResets   PasswordResetToken[]
+  savingsRecords    SavingsRecord[] @relation("OwnerSavings")
+  contributedSavings SavingsRecord[] @relation("ContributorSavings")
+  createdRecords   SavingsRecord[]  @relation("CreatedBy")
+}
+
+enum TransactionType {
+  CREDIT
+  DEBIT
+}
+
+model SavingsRecord {
+  id            String          @id @default(uuid())
+  userId        String
+  user          User            @relation("OwnerSavings", fields: [userId], references: [id], onDelete: Cascade)
+  amount        Decimal         @db.Decimal(15, 2)
+  type          TransactionType @default(CREDIT)
+  date          DateTime        @db.Date
+  note          String?
+  createdById   String
+  createdBy     User            @relation("CreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  contributorId String?
+  contributor   User?           @relation("ContributorSavings", fields: [contributorId], references: [id], onDelete: SetNull)
+  createdAt     DateTime        @default(now())
+
+  @@index([userId])
+  @@index([date])
+  @@index([userId, date])
+  @@index([createdById])
+  @@index([type])
+  @@index([contributorId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
