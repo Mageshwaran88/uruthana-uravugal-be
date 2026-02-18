@@ -2,6 +2,9 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @ApiTags('dashboard')
 @Controller('dashboard')
@@ -47,5 +50,14 @@ export class DashboardController {
         data: weeklyTrend,
       },
     };
+  }
+
+  @Get('admin/savings-report')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Admin: savings overview and charts' })
+  getAdminSavingsReport() {
+    return this.dashboard.getAdminSavingsReport();
   }
 }

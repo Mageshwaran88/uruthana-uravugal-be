@@ -13,6 +13,13 @@ export interface DashboardChartData {
   value: number;
 }
 
+export interface AdminSavingsReport {
+  totalSavings: number;
+  userCount: number;
+  byUser: Array<{ userId: string; userName: string; totalAmount: number }>;
+  trend: DashboardChartData[];
+}
+
 @Injectable()
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
@@ -78,5 +85,79 @@ export class DashboardService {
 
   async getWeeklyTrend(): Promise<DashboardChartData[]> {
     return this.getActivityChart();
+  }
+
+  async getAdminSavingsReport(): Promise<AdminSavingsReport> {
+    const [creditAgg, debitAgg, byUserType, trendData] = await Promise.all([
+      this.prisma.savingsRecord.aggregate({
+        where: { type: 'CREDIT' },
+        _sum: { amount: true },
+      }),
+      this.prisma.savingsRecord.aggregate({
+        where: { type: 'DEBIT' },
+        _sum: { amount: true },
+      }),
+      this.prisma.savingsRecord.groupBy({
+        by: ['userId', 'type'],
+        _sum: { amount: true },
+      }),
+      this.getSavingsTrend(7),
+    ]);
+
+    const totalSavings =
+      Number(creditAgg._sum.amount ?? 0) - Number(debitAgg._sum.amount ?? 0);
+    const userIds = [...new Set(byUserType.map((g) => g.userId))];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, name: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u.name]));
+    const byUser = userIds.map((userId) => {
+      const credit = byUserType.find((x) => x.userId === userId && x.type === 'CREDIT');
+      const debit = byUserType.find((x) => x.userId === userId && x.type === 'DEBIT');
+      const totalAmount =
+        Number(credit?._sum.amount ?? 0) - Number(debit?._sum.amount ?? 0);
+      return {
+        userId,
+        userName: userMap.get(userId) ?? 'Unknown',
+        totalAmount,
+      };
+    });
+
+    return {
+      totalSavings,
+      userCount: userIds.length,
+      byUser,
+      trend: trendData,
+    };
+  }
+
+  private async getSavingsTrend(days: number): Promise<DashboardChartData[]> {
+    const result: DashboardChartData[] = [];
+    const now = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
+      d.setHours(0, 0, 0, 0);
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      const [credit, debit] = await Promise.all([
+        this.prisma.savingsRecord.aggregate({
+          where: { date: { gte: d, lt: next }, type: 'CREDIT' },
+          _sum: { amount: true },
+        }),
+        this.prisma.savingsRecord.aggregate({
+          where: { date: { gte: d, lt: next }, type: 'DEBIT' },
+          _sum: { amount: true },
+        }),
+      ]);
+      const net =
+        Number(credit._sum.amount ?? 0) - Number(debit._sum.amount ?? 0);
+      result.push({
+        label: d.toISOString().slice(0, 10),
+        value: net,
+      });
+    }
+    return result;
   }
 }

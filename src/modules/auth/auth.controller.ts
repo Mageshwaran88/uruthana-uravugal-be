@@ -17,6 +17,9 @@ import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ResetPasswordWithOtpDto } from './dto/reset-password-with-otp.dto';
+import { SendOtpDto } from './dto/send-otp.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
 import { CurrentUser, CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -122,15 +125,39 @@ export class AuthController {
   @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request password reset email' })
+  @ApiOperation({ summary: 'Request OTP for password reset (email or mobile)' })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto);
   }
 
   @Public()
+  @Post('send-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send OTP to email or mobile (REGISTER or FORGOT_PASSWORD)' })
+  async sendOtp(@Body() dto: SendOtpDto) {
+    return this.auth.sendOtp(dto.identifier, dto.purpose, dto.channel);
+  }
+
+  @Public()
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify OTP' })
+  async verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.auth.verifyOtp(dto.identifier, dto.purpose, dto.otp);
+  }
+
+  @Public()
+  @Post('reset-password-with-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using OTP (no link)' })
+  async resetPasswordWithOtp(@Body() dto: ResetPasswordWithOtpDto) {
+    return this.auth.resetPasswordWithOtp(dto);
+  }
+
+  @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Reset password with token from email' })
+  @ApiOperation({ summary: 'Reset password with token from email link (legacy)' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto);
   }

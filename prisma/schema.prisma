@@ -87,3 +87,27 @@ model PasswordResetToken {
   @@index([userId])
   @@index([expiresAt])
 }
+
+enum OtpPurpose {
+  REGISTER
+  FORGOT_PASSWORD
+}
+
+enum OtpChannel {
+  EMAIL
+  SMS
+}
+
+model OtpVerification {
+  id         String     @id @default(uuid())
+  identifier String     // email or mobile (E.164 or normalized)
+  otpHash    String
+  channel    OtpChannel
+  purpose    OtpPurpose
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([identifier, purpose])
+  @@index([expiresAt])
+}

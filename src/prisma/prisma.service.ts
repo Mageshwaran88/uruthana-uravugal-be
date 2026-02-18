@@ -14,11 +14,18 @@ export class PrismaService
     await this.$disconnect();
   }
 
-  cleanDb() {
-    return this.$transaction([
-      this.refreshToken.deleteMany(),
-      this.passwordResetToken.deleteMany(),
-      this.user.deleteMany(),
-    ]);
+  async cleanDb() {
+    const prisma = this as unknown as {
+      refreshToken: { deleteMany: () => Promise<unknown> };
+      passwordResetToken: { deleteMany: () => Promise<unknown> };
+      otpVerification: { deleteMany: () => Promise<unknown> };
+      savingsRecord: { deleteMany: () => Promise<unknown> };
+      user: { deleteMany: () => Promise<unknown> };
+    };
+    await prisma.refreshToken.deleteMany();
+    await prisma.passwordResetToken.deleteMany();
+    await prisma.otpVerification.deleteMany();
+    await prisma.savingsRecord.deleteMany();
+    await prisma.user.deleteMany();
   }
 }

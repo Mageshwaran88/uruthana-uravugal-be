@@ -24,4 +24,19 @@ export default () => ({
   passwordReset: {
     expiresMinutes: 60,
   },
+
+  smtp: {
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT ?? '587', 10),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    from: process.env.SMTP_FROM ?? 'noreply@uruthana.local',
+  },
+
+  sms: {
+    apiUrl: process.env.SMS_API_URL,
+    apiKey: process.env.SMS_API_KEY,
+    senderId: process.env.SMS_SENDER_ID,
+  },
 });

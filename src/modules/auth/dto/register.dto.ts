@@ -25,8 +25,13 @@ export class RegisterDto {
   @IsNotEmpty()
   password: string;
 
-  @ApiProperty({ example: '+1234567890', required: false })
-  @IsOptional()
+  @ApiProperty({ example: '+919876543210' })
   @IsString()
-  mobile?: string;
+  @IsNotEmpty({ message: 'Mobile is required for verification' })
+  mobile: string;
+
+  @ApiProperty({ example: '123456', minLength: 6, maxLength: 6 })
+  @IsString()
+  @IsNotEmpty({ message: 'OTP is required' })
+  otp: string;
 }

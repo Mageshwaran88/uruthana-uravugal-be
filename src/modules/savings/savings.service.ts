@@ -106,6 +106,13 @@ export class SavingsService {
       if (fromDate) (where.date as Record<string, Date>).gte = fromDate;
       if (toDate) (where.date as Record<string, Date>).lte = toDate;
     }
+    if (query.type) {
+      where.type = query.type;
+    }
+
+    const sortBy = query.sortBy ?? 'date';
+    const sortOrder = query.sortOrder ?? 'desc';
+    const orderBy = { [sortBy]: sortOrder } as { date?: 'asc' | 'desc'; amount?: 'asc' | 'desc'; createdAt?: 'asc' | 'desc' };
 
     const [records, total] = await Promise.all([
       this.prisma.savingsRecord.findMany({
@@ -115,7 +122,7 @@ export class SavingsService {
           user: { select: { id: true, name: true } },
           createdBy: { select: { id: true, name: true } },
         },
-        orderBy: { date: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),

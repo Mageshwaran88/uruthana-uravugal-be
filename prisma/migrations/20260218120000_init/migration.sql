@@ -4,6 +4,12 @@ CREATE TYPE "Role" AS ENUM ('USER', 'ADMIN');
 -- CreateEnum
 CREATE TYPE "TransactionType" AS ENUM ('CREDIT', 'DEBIT');
 
+-- CreateEnum
+CREATE TYPE "OtpPurpose" AS ENUM ('REGISTER', 'FORGOT_PASSWORD');
+
+-- CreateEnum
+CREATE TYPE "OtpChannel" AS ENUM ('EMAIL', 'SMS');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -60,6 +66,20 @@ CREATE TABLE "PasswordResetToken" (
     CONSTRAINT "PasswordResetToken_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "OtpVerification" (
+    "id" TEXT NOT NULL,
+    "identifier" TEXT NOT NULL,
+    "otpHash" TEXT NOT NULL,
+    "channel" "OtpChannel" NOT NULL,
+    "purpose" "OtpPurpose" NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "usedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "OtpVerification_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
@@ -101,6 +121,12 @@ CREATE INDEX "PasswordResetToken_userId_idx" ON "PasswordResetToken"("userId");
 
 -- CreateIndex
 CREATE INDEX "PasswordResetToken_expiresAt_idx" ON "PasswordResetToken"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "OtpVerification_identifier_purpose_idx" ON "OtpVerification"("identifier", "purpose");
+
+-- CreateIndex
+CREATE INDEX "OtpVerification_expiresAt_idx" ON "OtpVerification"("expiresAt");
 
 -- AddForeignKey
 ALTER TABLE "SavingsRecord" ADD CONSTRAINT "SavingsRecord_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

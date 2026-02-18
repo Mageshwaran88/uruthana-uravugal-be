@@ -17,19 +17,17 @@ NestJS backend with PostgreSQL, Prisma, JWT auth, RBAC, and CRUD.
 npm install
 ```
 
-### 2. Database
+### 2. Database (Docker — recommended)
 
-Ensure PostgreSQL is running. Create a database:
+Start PostgreSQL with fixed credentials (no manual user/database setup):
 
-```sql
-CREATE DATABASE uruthana_uravugal;
+```bash
+docker compose up -d postgres
 ```
 
-Copy `.env.example` to `.env` and set `DATABASE_URL`:
+Your `.env` already uses these credentials. If you copy from `.env.example`, it matches.
 
-```
-DATABASE_URL="postgresql://user:password@localhost:5432/uruthana_uravugal?schema=public"
-```
+**Without Docker:** install PostgreSQL, create user/database, and set `DATABASE_URL` in `.env` to match.
 
 ### 3. Run migrations
 
@@ -43,7 +41,12 @@ npm run prisma:migrate
 npm run prisma:seed
 ```
 
-Creates admin user: `admin@example.com` / `admin123`
+Creates users with **known passwords** (dev only):
+
+| Email               | Password  | Role  |
+|---------------------|-----------|--------|
+| admin@example.com   | admin123  | ADMIN  |
+| test@example.com    | test123   | USER   |
 
 ### 5. Start
 

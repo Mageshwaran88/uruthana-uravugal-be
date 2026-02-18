@@ -1,5 +1,6 @@
-import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { TransactionType } from '@prisma/client';
 
 export enum SavingsPeriod {
   DAILY = 'daily',
@@ -23,6 +24,11 @@ export class SavingsQueryDto {
   @IsDateString()
   toDate?: string;
 
+  @ApiProperty({ enum: ['CREDIT', 'DEBIT'], required: false })
+  @IsOptional()
+  @IsEnum(TransactionType)
+  type?: TransactionType;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
@@ -35,4 +41,14 @@ export class SavingsQueryDto {
   @ApiProperty({ example: 20, required: false })
   @IsOptional()
   limit?: number;
+
+  @ApiProperty({ example: 'date', description: 'date | amount | createdAt', required: false })
+  @IsOptional()
+  @IsIn(['date', 'amount', 'createdAt'])
+  sortBy?: string;
+
+  @ApiProperty({ example: 'desc', required: false })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
 }

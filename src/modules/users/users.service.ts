@@ -142,6 +142,35 @@ export class UsersService {
     return user;
   }
 
+  async updateMe(
+    id: string,
+    dto: Pick<UpdateUserDto, 'name' | 'email' | 'mobile'>,
+  ) {
+    await this.findById(id);
+    const email = dto.email?.toLowerCase().trim();
+    if (email) {
+      const existing = await this.prisma.user.findFirst({
+        where: {
+          email,
+          deletedAt: null,
+          NOT: { id },
+        },
+      });
+      if (existing) throw new ConflictException('Email already in use');
+    }
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name.trim() }),
+        ...(email && { email }),
+        ...(dto.mobile !== undefined && {
+          mobile: dto.mobile?.trim() || null,
+        }),
+      },
+      select: userSelect,
+    });
+  }
+
   async softDelete(id: string) {
     await this.findById(id);
     await this.prisma.user.update({

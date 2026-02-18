@@ -46,17 +46,24 @@ function ensureDir(path: string) {
 
 ensureDir(AVATAR_DIR);
 
-const avatarStorage = diskStorage({
-  destination: (_req, _file, cb) => {
-    ensureDir(AVATAR_DIR);
-    cb(null, AVATAR_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = file.mimetype.split('/')[1] || 'jpg';
-    const userId = (req as { user?: CurrentUserPayload }).user?.id ?? 'anon';
-    cb(null, `${userId}-${Date.now()}.${ext}`);
-  },
-});
+function avatarStorageFactory() {
+  return diskStorage({
+    destination: (req, _file, cb) => {
+      const userId = (req as { user?: CurrentUserPayload }).user?.id;
+      if (!userId) {
+        cb(new Error('Unauthorized'), '');
+        return;
+      }
+      const userDir = join(AVATAR_DIR, userId);
+      ensureDir(userDir);
+      cb(null, userDir);
+    },
+    filename: (_req, file, cb) => {
+      const ext = file.mimetype.split('/')[1] || 'jpg';
+      cb(null, `${Date.now()}.${ext}`);
+    },
+  });
+}
 
 @ApiTags('users')
 @Controller('users')
@@ -86,6 +93,17 @@ export class UsersController {
     return this.users.findById(user.id);
   }
 
+  @Put('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update current user profile (name, email, mobile)' })
+  updateMe(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.users.updateMe(user.id, dto);
+  }
+
   @Post('me/avatar')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -99,7 +117,7 @@ export class UsersController {
   })
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: avatarStorage,
+      storage: avatarStorageFactory(),
       limits: { fileSize: 5 * 1024 * 1024 },
       fileFilter: (_req, file, cb) => {
         const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -118,7 +136,7 @@ export class UsersController {
     if (!file) {
       throw new Error('No file uploaded');
     }
-    const avatarUrl = `${AVATAR_PREFIX}/${file.filename}`;
+    const avatarUrl = `${AVATAR_PREFIX}/${user.id}/${file.filename}`;
     return this.users.updateAvatar(user.id, avatarUrl);
   }
 

@@ -7,14 +7,17 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
-import { Role } from '@prisma/client';  
+import { Role } from '@prisma/client';
 import { hashPassword, verifyPassword, generateSecureToken } from '../../common/utils/hash.util';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ResetPasswordWithOtpDto } from './dto/reset-password-with-otp.dto';
 import { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
+import { OtpService } from './otp.service';
+import { OtpChannel, OtpPurpose } from './otp.enums';  
 import * as crypto from 'crypto';
 
 export interface AuthResponse {
@@ -22,6 +25,7 @@ export interface AuthResponse {
     id: string;
     name: string;
     email: string | null;
+    mobile: string | null;
     role: string;
     avatarUrl: string | null;
   };
@@ -36,6 +40,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private otp: OtpService,
   ) {}
 
   async login(dto: LoginDto): Promise<AuthResponse> {
@@ -57,9 +62,13 @@ export class AuthService {
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
     const email = dto.email.toLowerCase().trim();
+    const mobile = dto.mobile?.trim() || null;
+    if (!mobile) {
+      throw new BadRequestException('Mobile number is required for registration');
+    }
     const existing = await this.prisma.user.findFirst({
       where: {
-        OR: [{ email }, ...(dto.mobile ? [{ mobile: dto.mobile }] : [])],
+        OR: [{ email }, { mobile: dto.mobile }],
         deletedAt: null,
       },
     });
@@ -68,16 +77,26 @@ export class AuthService {
         existing.email === email ? 'Email already registered' : 'Mobile already registered',
       );
     }
+    if (!dto.otp) {
+      throw new BadRequestException('OTP is required. Request OTP first.');
+    }
+    const verified =
+      (await this.otp.verify(email, OtpPurpose.REGISTER, dto.otp)) ||
+      (await this.otp.verify(mobile, OtpPurpose.REGISTER, dto.otp));
+    if (!verified) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
     const passwordHash = await hashPassword(dto.password);
     const role: Role = email === 'admin@example.com' ? Role.ADMIN : Role.USER;
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
         email,
-        mobile: dto.mobile?.trim() || null,
+        mobile,
         passwordHash,
         role,
         emailVerifiedAt: new Date(),
+        mobileVerifiedAt: dto.otp ? new Date() : null,
       },
     });
     return this.issueTokens(user);
@@ -122,36 +141,81 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
-    const user = await this.prisma.user.findFirst({
-      where: { email: dto.email.toLowerCase(), deletedAt: null },
-    });
-    if (!user) {
-      return { message: 'If the email exists, a reset link has been sent.' };
+    const email = dto.email?.trim().toLowerCase();
+    const mobile = dto.mobile?.trim();
+    if (!email && !mobile) {
+      throw new BadRequestException('Provide either email or mobile');
     }
-    const token = generateSecureToken();
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const expiresMinutes = this.config.get<number>(
-      'passwordReset.expiresMinutes',
-      60,
-    );
-    const expiresAt = new Date(Date.now() + expiresMinutes * 60 * 1000);
-    await this.prisma.passwordResetToken.create({
-      data: {
-        tokenHash,
-        userId: user.id,
-        expiresAt,
+    const user = await this.prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [
+          ...(email ? [{ email }] : []),
+          ...(mobile ? [{ mobile }] : []),
+        ],
       },
     });
-    const baseUrl =
-      this.config.get<string>('cors.origin') ?? 'http://localhost:3000';
-    const resetLink = `${baseUrl}/reset-password?token=${token}`;
-    console.log(
-      `[DEV] Password reset link for ${user.email}: ${resetLink}`,
-    );
-    return {
-      message:
-        'If the email exists, a reset link has been sent. Check console in dev.',
-    };
+    if (!user) {
+      return { message: 'If this account exists, you will receive an OTP shortly.' };
+    }
+    const identifier = email ?? mobile!;
+    const channel = OtpService.getChannel(identifier);
+    await this.otp.createAndSend(identifier, OtpPurpose.FORGOT_PASSWORD, channel);
+    return { message: 'If this account exists, you will receive an OTP shortly.' };
+  }
+
+  async sendOtp(identifier: string, purpose: OtpPurpose, channel?: OtpChannel) {
+    const normalized = identifier.trim().toLowerCase();
+    if (purpose === OtpPurpose.FORGOT_PASSWORD) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          deletedAt: null,
+          OR: [
+            { email: normalized },
+            { mobile: identifier.trim() },
+          ],
+        },
+      });
+      if (!user) {
+        return { message: 'If this account exists, you will receive an OTP shortly.' };
+      }
+      const sendTo = normalized.includes('@') ? user.email! : user.mobile ?? user.email!;
+      const sendChannel = OtpService.getChannel(sendTo ?? normalized);
+      await this.otp.createAndSend(sendTo ?? normalized, purpose, channel ?? sendChannel);
+      return { message: 'If this account exists, you will receive an OTP shortly.' };
+    }
+    const ch = channel ?? OtpService.getChannel(normalized);
+    await this.otp.createAndSend(normalized, purpose, ch);
+    return { message: 'OTP sent. Check your email or phone.' };
+  }
+
+  async verifyOtp(identifier: string, purpose: OtpPurpose, otp: string): Promise<{ valid: boolean }> {
+    const valid = await this.otp.verify(identifier.trim().toLowerCase(), purpose, otp);
+    return { valid };
+  }
+
+  async resetPasswordWithOtp(dto: ResetPasswordWithOtpDto): Promise<{ message: string }> {
+    const normalized = dto.identifier.trim().toLowerCase();
+    const valid = await this.otp.verify(normalized, OtpPurpose.FORGOT_PASSWORD, dto.otp);
+    if (!valid) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
+    const user = await this.prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [{ email: normalized }, { mobile: dto.identifier.trim() }],
+      },
+    });
+    if (!user) throw new BadRequestException('User not found');
+    const newHash = await hashPassword(dto.newPassword);
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: newHash },
+      }),
+      this.prisma.refreshToken.deleteMany({ where: { userId: user.id } }),
+    ]);
+    return { message: 'Password reset successfully. Please log in.' };
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<{ message: string }> {
@@ -192,6 +256,7 @@ export class AuthService {
         id: true,
         name: true,
         email: true,
+        mobile: true,
         role: true,
         avatarUrl: true,
         emailVerifiedAt: true,
@@ -206,6 +271,7 @@ export class AuthService {
     id: string;
     name: string;
     email: string | null;
+    mobile?: string | null;
     role: Role;
     avatarUrl: string | null;
   }): Promise<AuthResponse> {
@@ -235,6 +301,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
+        mobile: user.mobile ?? null,
         role: user.role,
         avatarUrl: user.avatarUrl,
       },
