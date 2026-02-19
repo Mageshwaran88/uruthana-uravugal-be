@@ -50,7 +50,7 @@ async function bootstrap() {
     SwaggerModule.setup(`${prefix}/docs`, app, document);
   }
 
-  const port = config.get<number>('port', 3001);
+  const port = config.get<number>('port', 8000);
   await app.listen(port);
   console.log(`🚀 API running at http://localhost:${port}/${prefix}`);
   if (config.get('env') !== 'production') {

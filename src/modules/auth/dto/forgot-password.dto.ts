@@ -1,16 +1,9 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { IsEmail, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ForgotPasswordDto {
-  @ApiProperty({ example: 'user@example.com', required: false })
-  @ValidateIf((o) => !o.mobile)
+  @ApiProperty({ example: 'user@example.com', description: 'Email to receive OTP (forgot password uses email only)' })
   @IsEmail()
-  @IsNotEmpty({ message: 'Provide either email or mobile' })
-  email?: string;
-
-  @ApiProperty({ example: '+919876543210', required: false })
-  @ValidateIf((o) => !o.email)
-  @IsString()
-  @IsNotEmpty({ message: 'Provide either email or mobile' })
-  mobile?: string;
+  @IsNotEmpty({ message: 'Email is required' })
+  email: string;
 }

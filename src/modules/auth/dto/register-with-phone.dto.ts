@@ -1,17 +1,17 @@
 import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
-export class LoginDto {
+export class RegisterWithPhoneDto {
   @ApiProperty({
-    example: 'user@example.com or 9876543210',
-    description: 'Email or mobile number',
+    description: 'Firebase ID token from signInWithPhoneNumber + confirm()',
   })
   @IsString()
   @IsNotEmpty()
-  identifier: string;
+  firebaseIdToken: string;
 
   @ApiProperty({ example: 'password123', minLength: 6 })
   @IsString()
   @MinLength(6, { message: 'Password must be at least 6 characters' })
+  @IsNotEmpty()
   password: string;
 }

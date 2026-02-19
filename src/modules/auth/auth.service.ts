@@ -15,9 +15,11 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResetPasswordWithOtpDto } from './dto/reset-password-with-otp.dto';
+import { RegisterWithPhoneDto } from './dto/register-with-phone.dto';
 import { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { OtpService } from './otp.service';
-import { OtpChannel, OtpPurpose } from './otp.enums';  
+import { FirebaseService } from './firebase.service';
+import { OtpChannel, OtpPurpose } from './otp.enums';
 import * as crypto from 'crypto';
 
 export interface AuthResponse {
@@ -41,62 +43,83 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private otp: OtpService,
+    private firebase: FirebaseService,
   ) {}
 
   async login(dto: LoginDto): Promise<AuthResponse> {
+    const identifier = dto.identifier.trim();
+    const isEmail = identifier.includes('@');
     const user = await this.prisma.user.findFirst({
       where: {
-        email: dto.email.toLowerCase(),
         deletedAt: null,
+        ...(isEmail
+          ? { email: identifier.toLowerCase() }
+          : { mobile: identifier }),
       },
     });
     if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid email/mobile or password');
     }
     const valid = await verifyPassword(user.passwordHash, dto.password);
     if (!valid) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid email/mobile or password');
     }
     return this.issueTokens(user);
   }
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
-    const email = dto.email.toLowerCase().trim();
-    const mobile = dto.mobile?.trim() || null;
-    if (!mobile) {
-      throw new BadRequestException('Mobile number is required for registration');
-    }
+    const email = dto.email.trim().toLowerCase();
     const existing = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email }, { mobile: dto.mobile }],
-        deletedAt: null,
-      },
+      where: { email, deletedAt: null },
     });
     if (existing) {
-      throw new ConflictException(
-        existing.email === email ? 'Email already registered' : 'Mobile already registered',
-      );
+      throw new ConflictException('Email already registered');
     }
-    if (!dto.otp) {
-      throw new BadRequestException('OTP is required. Request OTP first.');
-    }
-    const verified =
-      (await this.otp.verify(email, OtpPurpose.REGISTER, dto.otp)) ||
-      (await this.otp.verify(mobile, OtpPurpose.REGISTER, dto.otp));
+    const verified = await this.otp.verify(email, OtpPurpose.REGISTER, dto.otp);
     if (!verified) {
       throw new BadRequestException('Invalid or expired OTP');
     }
     const passwordHash = await hashPassword(dto.password);
-    const role: Role = email === 'admin@example.com' ? Role.ADMIN : Role.USER;
     const user = await this.prisma.user.create({
       data: {
-        name: dto.name.trim(),
+        name: 'User',
         email,
+        mobile: null,
+        passwordHash,
+        role: Role.USER,
+        emailVerifiedAt: new Date(),
+      },
+    });
+    return this.issueTokens(user);
+  }
+
+  async registerWithPhone(dto: RegisterWithPhoneDto): Promise<AuthResponse> {
+    if (!this.firebase.isEnabled()) {
+      throw new BadRequestException(
+        'Firebase Phone Auth is not configured. Set FIREBASE_SERVICE_ACCOUNT_PATH in .env.',
+      );
+    }
+    const decoded = await this.firebase.verifyIdToken(dto.firebaseIdToken);
+    const phoneNumber = decoded.phone_number;
+    if (!phoneNumber) {
+      throw new BadRequestException('Invalid Firebase token: phone number not found');
+    }
+    const mobile = phoneNumber.replace(/\s/g, '').trim();
+    const existing = await this.prisma.user.findFirst({
+      where: { mobile, deletedAt: null },
+    });
+    if (existing) {
+      throw new ConflictException('This mobile number is already registered');
+    }
+    const passwordHash = await hashPassword(dto.password);
+    const user = await this.prisma.user.create({
+      data: {
+        name: 'User',
+        email: null,
         mobile,
         passwordHash,
-        role,
-        emailVerifiedAt: new Date(),
-        mobileVerifiedAt: dto.otp ? new Date() : null,
+        role: Role.USER,
+        mobileVerifiedAt: new Date(),
       },
     });
     return this.issueTokens(user);
@@ -141,52 +164,49 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
-    const email = dto.email?.trim().toLowerCase();
-    const mobile = dto.mobile?.trim();
-    if (!email && !mobile) {
-      throw new BadRequestException('Provide either email or mobile');
-    }
+    const email = dto.email.trim().toLowerCase();
     const user = await this.prisma.user.findFirst({
-      where: {
-        deletedAt: null,
-        OR: [
-          ...(email ? [{ email }] : []),
-          ...(mobile ? [{ mobile }] : []),
-        ],
-      },
+      where: { email, deletedAt: null },
     });
     if (!user) {
       return { message: 'If this account exists, you will receive an OTP shortly.' };
     }
-    const identifier = email ?? mobile!;
-    const channel = OtpService.getChannel(identifier);
-    await this.otp.createAndSend(identifier, OtpPurpose.FORGOT_PASSWORD, channel);
+    await this.otp.createAndSend(email, OtpPurpose.FORGOT_PASSWORD, OtpChannel.EMAIL);
     return { message: 'If this account exists, you will receive an OTP shortly.' };
   }
 
   async sendOtp(identifier: string, purpose: OtpPurpose, channel?: OtpChannel) {
     const normalized = identifier.trim().toLowerCase();
+
+    // All OTP is sent by email only (no mobile/SMS)
+    if (!normalized.includes('@')) {
+      throw new BadRequestException('OTP is sent by email only. Enter your email address.');
+    }
+
+    if (purpose === OtpPurpose.REGISTER) {
+      const existing = await this.prisma.user.findFirst({
+        where: { email: normalized, deletedAt: null },
+      });
+      if (existing) {
+        throw new ConflictException('Email already registered');
+      }
+      await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL);
+      return { message: 'OTP sent to your email.' };
+    }
+
     if (purpose === OtpPurpose.FORGOT_PASSWORD) {
       const user = await this.prisma.user.findFirst({
-        where: {
-          deletedAt: null,
-          OR: [
-            { email: normalized },
-            { mobile: identifier.trim() },
-          ],
-        },
+        where: { email: normalized, deletedAt: null },
       });
       if (!user) {
         return { message: 'If this account exists, you will receive an OTP shortly.' };
       }
-      const sendTo = normalized.includes('@') ? user.email! : user.mobile ?? user.email!;
-      const sendChannel = OtpService.getChannel(sendTo ?? normalized);
-      await this.otp.createAndSend(sendTo ?? normalized, purpose, channel ?? sendChannel);
+      await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL);
       return { message: 'If this account exists, you will receive an OTP shortly.' };
     }
-    const ch = channel ?? OtpService.getChannel(normalized);
-    await this.otp.createAndSend(normalized, purpose, ch);
-    return { message: 'OTP sent. Check your email or phone.' };
+
+    await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL);
+    return { message: 'OTP sent to your email.' };
   }
 
   async verifyOtp(identifier: string, purpose: OtpPurpose, otp: string): Promise<{ valid: boolean }> {

@@ -20,6 +20,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ResetPasswordWithOtpDto } from './dto/reset-password-with-otp.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { RegisterWithPhoneDto } from './dto/register-with-phone.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../../common/guards/jwt-refresh.guard';
 import { CurrentUser, CurrentUserPayload } from '../../common/decorators/current-user.decorator';
@@ -36,7 +37,7 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiOperation({ summary: 'Login with email or mobile and password' })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.login(dto);
     this.setRefreshCookie(res, result);
@@ -50,12 +51,29 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Register new user' })
+  @ApiOperation({ summary: 'Register with email + OTP (sent to email) + password' })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.auth.register(dto);
+    this.setRefreshCookie(res, result);
+    return {
+      success: true,
+      user: result.user,
+      token: result.accessToken,
+      expiresIn: result.expiresIn,
+    };
+  }
+
+  @Public()
+  @Post('register-with-phone')
+  @ApiOperation({ summary: 'Register with Firebase Phone Auth (free OTP) + password' })
+  async registerWithPhone(
+    @Body() dto: RegisterWithPhoneDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.auth.registerWithPhone(dto);
     this.setRefreshCookie(res, result);
     return {
       success: true,
@@ -125,7 +143,7 @@ export class AuthController {
   @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request OTP for password reset (email or mobile)' })
+  @ApiOperation({ summary: 'Request OTP for password reset (email only)' })
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto);
   }
@@ -133,7 +151,7 @@ export class AuthController {
   @Public()
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send OTP to email or mobile (REGISTER or FORGOT_PASSWORD)' })
+  @ApiOperation({ summary: 'Send OTP to email only (REGISTER or FORGOT_PASSWORD)' })
   async sendOtp(@Body() dto: SendOtpDto) {
     return this.auth.sendOtp(dto.identifier, dto.purpose, dto.channel);
   }

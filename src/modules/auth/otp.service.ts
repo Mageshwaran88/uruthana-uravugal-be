@@ -24,7 +24,7 @@ export class OtpService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
-  ) {}
+  ) { }
 
   private get otpVerification(): OtpVerificationDelegate {
     return (this.prisma as unknown as { otpVerification: OtpVerificationDelegate }).otpVerification;
@@ -123,55 +123,42 @@ export class OtpService {
   ): Promise<void> {
     const apiUrl = this.config.get<string>('sms.apiUrl');
     const apiKey = this.config.get<string>('sms.apiKey');
+    const senderId = this.config.get<string>('sms.senderId');
+
+
     if (!apiUrl || !apiKey) {
-      console.warn(
-        `[OTP] SMS not sent: API not configured (apiUrl=${!!apiUrl}, apiKey=${!!apiKey}). OTP for ${mobile}: ${otp}`,
-      );
+      console.warn(`[OTP] SMS config missing. OTP: ${otp}`);
       return;
     }
+
     const numbers = mobile.replace(/\D/g, '').slice(-10);
-    if (numbers.length < 10) {
-      console.warn(`[OTP] SMS skipped: invalid number ${mobile}. OTP: ${otp}`);
-      return;
-    }
+
     try {
-      // Fast2SMS bulkV2 OTP format: https://www.fast2sms.com/dev/bulkV2
-      const body: Record<string, string> = {
-        route: 'otp',
+      const body = {
+        route: 'q',
+        message: `Your OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
         numbers,
-        variables_values: otp,
         flash: '0',
       };
-      const senderId = this.config.get<string>('sms.senderId');
-      if (senderId) body.sender_id = senderId;
+
       const res = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           authorization: apiKey,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
       });
-      const text = await res.text();
-      if (!res.ok) {
-        console.warn('[OTP] SMS API error:', res.status, text);
-        console.warn(`[OTP] Fallback for ${mobile}: ${otp}`);
-        return;
-      }
-      let json: unknown;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = text;
-      }
-      const ok = json && typeof json === 'object' && 'return' in json && (json as { return?: boolean }).return === true;
-      if (!ok) {
-        console.warn('[OTP] SMS API returned failure:', json);
-        console.warn(`[OTP] Fallback for ${mobile}: ${otp}`);
+
+      const json = await res.json();
+
+      if (json.return === true) {
+        console.log('[OTP] SMS sent successfully');
+      } else {
+        console.warn('[OTP] Fast2SMS error:', json);
       }
     } catch (err) {
-      console.error('[OTP] Send SMS failed:', err);
-      console.warn(`[OTP] Fallback for ${mobile}: ${otp}`);
+      console.error('[OTP] SMS send failed:', err);
     }
   }
 

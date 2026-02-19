@@ -39,4 +39,9 @@ export default () => ({
     apiKey: process.env.SMS_API_KEY,
     senderId: process.env.SMS_SENDER_ID,
   },
+
+  firebase: {
+    serviceAccountPath: process.env.FIREBASE_SERVICE_ACCOUNT_PATH,
+    serviceAccountJson: process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+  },
 });
