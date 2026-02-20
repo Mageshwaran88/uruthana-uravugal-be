@@ -79,12 +79,22 @@ export class AuthService {
     if (!verified) {
       throw new BadRequestException('Invalid or expired OTP');
     }
+    const mobile = dto.mobile?.replace(/\s/g, '').trim() || null;
+    if (mobile) {
+      const existingMobile = await this.prisma.user.findFirst({
+        where: { mobile, deletedAt: null },
+      });
+      if (existingMobile) {
+        throw new ConflictException('This mobile number is already registered');
+      }
+    }
+    const name = dto.username?.trim() || 'User';
     const passwordHash = await hashPassword(dto.password);
     const user = await this.prisma.user.create({
       data: {
-        name: 'User',
+        name,
         email,
-        mobile: null,
+        mobile,
         passwordHash,
         role: Role.USER,
         emailVerifiedAt: new Date(),
