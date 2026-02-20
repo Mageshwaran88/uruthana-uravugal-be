@@ -151,9 +151,9 @@ export class AuthController {
   @Public()
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send OTP to email only (REGISTER or FORGOT_PASSWORD)' })
+  @ApiOperation({ summary: 'Send OTP to email (optional sendOtpTo = different email to receive OTP)' })
   async sendOtp(@Body() dto: SendOtpDto) {
-    return this.auth.sendOtp(dto.identifier, dto.purpose, dto.channel);
+    return this.auth.sendOtp(dto.identifier, dto.purpose, dto.channel, dto.sendOtpTo);
   }
 
   @Public()

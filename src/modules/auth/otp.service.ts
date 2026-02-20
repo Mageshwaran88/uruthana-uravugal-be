@@ -34,6 +34,7 @@ export class OtpService {
     identifier: string,
     purpose: OtpPurpose,
     channel: OtpChannel,
+    sendOtpTo?: string,
   ): Promise<{ message: string }> {
     const normalized = identifier.trim().toLowerCase();
     const otp = generateOtp();
@@ -55,7 +56,8 @@ export class OtpService {
     });
 
     if (channel === OtpChannel.EMAIL) {
-      await this.sendEmailOtp(normalized, otp, purpose);
+      const emailToSendTo = sendOtpTo?.trim().toLowerCase() || normalized;
+      await this.sendEmailOtp(emailToSendTo, otp, purpose);
     } else {
       await this.sendSmsOtp(normalized, otp, purpose);
     }

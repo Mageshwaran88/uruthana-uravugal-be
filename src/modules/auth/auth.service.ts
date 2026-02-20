@@ -185,7 +185,7 @@ export class AuthService {
     return { message: 'If this account exists, you will receive an OTP shortly.' };
   }
 
-  async sendOtp(identifier: string, purpose: OtpPurpose, channel?: OtpChannel) {
+  async sendOtp(identifier: string, purpose: OtpPurpose, channel?: OtpChannel, sendOtpTo?: string) {
     const normalized = identifier.trim().toLowerCase();
 
     // All OTP is sent by email only (no mobile/SMS)
@@ -200,8 +200,8 @@ export class AuthService {
       if (existing) {
         throw new ConflictException('Email already registered');
       }
-      await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL);
-      return { message: 'OTP sent to your email.' };
+      await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL, sendOtpTo);
+      return { message: sendOtpTo ? 'OTP sent to the email you provided.' : 'OTP sent to your email.' };
     }
 
     if (purpose === OtpPurpose.FORGOT_PASSWORD) {
@@ -211,12 +211,12 @@ export class AuthService {
       if (!user) {
         return { message: 'If this account exists, you will receive an OTP shortly.' };
       }
-      await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL);
-      return { message: 'If this account exists, you will receive an OTP shortly.' };
+      await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL, sendOtpTo);
+      return { message: sendOtpTo ? 'If this account exists, OTP was sent to the email you provided.' : 'If this account exists, you will receive an OTP shortly.' };
     }
 
-    await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL);
-    return { message: 'OTP sent to your email.' };
+    await this.otp.createAndSend(normalized, purpose, OtpChannel.EMAIL, sendOtpTo);
+    return { message: sendOtpTo ? 'OTP sent to the email you provided.' : 'OTP sent to your email.' };
   }
 
   async verifyOtp(identifier: string, purpose: OtpPurpose, otp: string): Promise<{ valid: boolean }> {
