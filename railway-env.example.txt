@@ -2,6 +2,9 @@
 # Replace the placeholder values with your real values (from your local .env).
 # One line per variable. Remove the # lines before pasting.
 # If a value contains spaces or special chars, wrap in double quotes.
+#
+# CRITICAL: DATABASE_URL must be on ONE line (no line breaks inside the value).
+# If it wraps in the Raw Editor, Prisma will not see it and deploy will fail with P1012.
 
 PORT=8000
 NODE_ENV=production
