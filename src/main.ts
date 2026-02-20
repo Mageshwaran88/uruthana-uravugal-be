@@ -31,13 +31,17 @@ async function bootstrap() {
     }),
   );
 
-  const corsOrigin = config.get<string>('cors.origin', 'http://localhost:3000');
+  const corsOrigin = config.get<string>('CORS_ORIGIN', '*');
+
   app.enableCors({
-    origin: corsOrigin.split(',').map((o) => o.trim()),
+    origin: corsOrigin === '*'
+      ? true
+      : corsOrigin.split(',').map((o) => o.trim()),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
+
 
   if (config.get('env') !== 'production') {
     const docConfig = new DocumentBuilder()
