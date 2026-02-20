@@ -86,9 +86,15 @@ export class OtpService {
       const nodemailer = await import('nodemailer');
       const transporter = nodemailer.createTransport({
         host,
-        port: this.config.get<number>('smtp.port', 587),
-        secure: this.config.get('smtp.secure', false),
-        auth: { user, pass },
+        port: this.config.get<number>('smtp.port'),
+        secure: this.config.get<boolean>('smtp.secure'),
+        auth: {
+          user,
+          pass,
+        },
+        connectionTimeout: 20000,
+        greetingTimeout: 20000,
+        socketTimeout: 20000,
       });
       const from = this.config.get<string>('smtp.from', user);
       const subject =
