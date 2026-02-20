@@ -73,12 +73,46 @@ export class OtpService {
     otp: string,
     purpose: OtpPurpose,
   ): Promise<void> {
+    const subject =
+      purpose === OtpPurpose.REGISTER
+        ? 'Your registration OTP'
+        : 'Reset your password - OTP';
+    const text = `Your OTP is: ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
+    const html = `<p>Your OTP is: <strong>${otp}</strong></p><p>It expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`;
+
+    // 1) Prefer Resend (works on Railway; SMTP is often blocked)
+    const resendKey = this.config.get<string>('resend.apiKey');
+    if (resendKey) {
+      try {
+        const from = this.config.get<string>('resend.from', 'onboarding@resend.dev');
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ from, to: email, subject, html, text }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          return;
+        }
+        console.error('[OTP] Resend API error:', res.status, data);
+      } catch (err) {
+        console.error('[OTP] Resend request failed:', err);
+      }
+      console.warn(`[OTP] Fallback - ${purpose} for ${email}: ${otp}`);
+      return;
+    }
+
+    // 2) Fallback: SMTP (often times out on Railway due to port blocking)
     const host = this.config.get<string>('smtp.host');
     const user = this.config.get<string>('smtp.user');
     const pass = this.config.get<string>('smtp.pass');
     if (!host || !user || !pass) {
       console.warn(
-        `[OTP] Email not sent: SMTP not configured (host=${!!host}, user=${!!user}, pass=${!!pass}). OTP for ${email}: ${otp}`,
+        `[OTP] Email not sent: No Resend (RESEND_API_KEY) or SMTP configured. OTP for ${email}: ${otp}. ` +
+        'On Railway, set RESEND_API_KEY (resend.com) for reliable delivery.',
       );
       return;
     }
@@ -88,32 +122,24 @@ export class OtpService {
         host,
         port: this.config.get<number>('smtp.port'),
         secure: this.config.get<boolean>('smtp.secure'),
-        auth: {
-          user,
-          pass,
-        },
-        connectionTimeout: 20000,
-        greetingTimeout: 20000,
-        socketTimeout: 20000,
+        auth: { user, pass },
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
       });
       const from = this.config.get<string>('smtp.from', user);
-      const subject =
-        purpose === OtpPurpose.REGISTER
-          ? 'Your registration OTP'
-          : 'Reset your password - OTP';
       await transporter.sendMail({
         from,
         to: email,
         subject,
-        text: `Your OTP is: ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
-        html: `<p>Your OTP is: <strong>${otp}</strong></p><p>It expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`,
+        text,
+        html,
       });
     } catch (err: unknown) {
       const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
       if (code === 'EAUTH' && host?.includes('gmail')) {
         console.error(
-          '[OTP] Gmail SMTP auth failed. Use an App Password, not your normal password: ' +
-          'Google Account → Security → 2-Step Verification → App passwords. Set SMTP_PASS in .env to the 16-character app password.',
+          '[OTP] Gmail SMTP auth failed. Use an App Password. Or on Railway use RESEND_API_KEY instead (SMTP often blocked).',
         );
       } else {
         console.error('[OTP] Send email failed:', err);

@@ -22,6 +22,14 @@ OTP_LENGTH=6
 OTP_EXPIRES_MINUTES=5
 OTP_MAX_ATTEMPTS=3
 
+# --- Email: OTP delivery (pick one) ---
+# Option A (recommended on Railway): Resend – no SMTP ports, works reliably.
+# 1) Sign up at https://resend.com, verify your domain or use onboarding@resend.dev for testing.
+# 2) Create API key at https://resend.com/api-keys and set it below.
+RESEND_API_KEY=re_xxxxxxxxxxxx
+RESEND_FROM=Uruthana Uravugal <onboarding@resend.dev>
+
+# Option B: SMTP (often blocked on Railway – connection timeout). Use for local dev only.
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false

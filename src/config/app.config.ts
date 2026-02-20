@@ -34,6 +34,12 @@ export default () => ({
     from: process.env.SMTP_FROM ?? 'noreply@uruthana.local',
   },
 
+  /** Resend.com API (recommended on Railway – no SMTP port blocking). Set RESEND_API_KEY to use. */
+  resend: {
+    apiKey: process.env.RESEND_API_KEY,
+    from: process.env.RESEND_FROM ?? process.env.SMTP_FROM ?? 'onboarding@resend.dev',
+  },
+
   sms: {
     apiUrl: process.env.SMS_API_URL,
     apiKey: process.env.SMS_API_KEY,
