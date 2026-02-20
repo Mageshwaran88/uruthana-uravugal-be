@@ -1,0 +1,27 @@
+# Copy these variable NAMES into Railway → Variables → Raw Editor (ENV tab)
+# Replace the placeholder values with your real values (from your local .env).
+# One line per variable. Remove the # lines before pasting.
+# If a value contains spaces or special chars, wrap in double quotes.
+
+PORT=8000
+NODE_ENV=production
+API_PREFIX=api
+
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DB?sslmode=require
+
+JWT_SECRET=your-secret-change-in-production
+JWT_ACCESS_EXPIRES=15m
+JWT_REFRESH_EXPIRES=7d
+
+CORS_ORIGIN=*
+
+OTP_LENGTH=6
+OTP_EXPIRES_MINUTES=5
+OTP_MAX_ATTEMPTS=3
+
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM="Uruthana Uravugal <your-email@gmail.com>"

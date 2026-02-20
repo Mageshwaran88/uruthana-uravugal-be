@@ -73,3 +73,13 @@ npm run start:dev
 | GET | /api/users/me | JWT | Current user profile |
 | POST | /api/users/me/avatar | JWT | Upload avatar |
 | GET | /api/users/:id | JWT | Get user by ID |
+
+## Deploy to Railway
+
+Railway does **not** read `.env` from GitHub. You must set all variables in the Railway dashboard.
+
+1. In Railway: open your **uruthana-uravugal-be** service → **Variables** → **Raw Editor**.
+2. Remove any placeholder vars (e.g. `HELLO-world`, `FOO-bar`) and paste your production env (see `railway-env.example.txt` for the list of keys).
+3. Use your real `DATABASE_URL` (Neon), `JWT_SECRET`, and SMTP values. Click **Update Variables** and let Railway redeploy.
+
+Full steps (backend + frontend on Vercel): see [DEPLOYMENT.md](../DEPLOYMENT.md) in the repo root.
