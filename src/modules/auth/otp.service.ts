@@ -82,7 +82,43 @@ export class OtpService {
     const text = `Your OTP is: ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
     const html = `<p>Your OTP is: <strong>${otp}</strong></p><p>It expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`;
 
-    // 1) Prefer Resend (works on Railway; SMTP is often blocked)
+    // 1) Prefer SMTP (Gmail) when configured – sends from your email locally
+    const host = this.config.get<string>('smtp.host');
+    const user = this.config.get<string>('smtp.user');
+    const pass = this.config.get<string>('smtp.pass');
+    if (host && user && pass) {
+      try {
+        const nodemailer = await import('nodemailer');
+        const transporter = nodemailer.createTransport({
+          host,
+          port: this.config.get<number>('smtp.port'),
+          secure: this.config.get<boolean>('smtp.secure'),
+          auth: { user, pass },
+          connectionTimeout: 15000,
+          greetingTimeout: 10000,
+          socketTimeout: 15000,
+        });
+        const from = this.config.get<string>('smtp.from', user);
+        await transporter.sendMail({
+          from,
+          to: email,
+          subject,
+          text,
+          html,
+        });
+        return;
+      } catch (err: unknown) {
+        const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
+        if (code === 'EAUTH' && host?.includes('gmail')) {
+          console.error('[OTP] Gmail SMTP auth failed. Use an App Password.');
+        } else {
+          console.error('[OTP] SMTP failed (e.g. timeout on Railway):', err);
+        }
+        // Fall through to Resend if configured
+      }
+    }
+
+    // 2) Fallback: Resend (works on Railway when SMTP is blocked)
     const resendKey = this.config.get<string>('resend.apiKey');
     if (resendKey) {
       try {
@@ -103,51 +139,9 @@ export class OtpService {
       } catch (err) {
         console.error('[OTP] Resend request failed:', err);
       }
-      console.warn(`[OTP] Fallback - ${purpose} for ${email}: ${otp}`);
-      return;
     }
 
-    // 2) Fallback: SMTP (often times out on Railway due to port blocking)
-    const host = this.config.get<string>('smtp.host');
-    const user = this.config.get<string>('smtp.user');
-    const pass = this.config.get<string>('smtp.pass');
-    if (!host || !user || !pass) {
-      console.warn(
-        `[OTP] Email not sent: No Resend (RESEND_API_KEY) or SMTP configured. OTP for ${email}: ${otp}. ` +
-        'On Railway, set RESEND_API_KEY (resend.com) for reliable delivery.',
-      );
-      return;
-    }
-    try {
-      const nodemailer = await import('nodemailer');
-      const transporter = nodemailer.createTransport({
-        host,
-        port: this.config.get<number>('smtp.port'),
-        secure: this.config.get<boolean>('smtp.secure'),
-        auth: { user, pass },
-        connectionTimeout: 15000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
-      });
-      const from = this.config.get<string>('smtp.from', user);
-      await transporter.sendMail({
-        from,
-        to: email,
-        subject,
-        text,
-        html,
-      });
-    } catch (err: unknown) {
-      const code = err && typeof err === 'object' && 'code' in err ? (err as { code?: string }).code : undefined;
-      if (code === 'EAUTH' && host?.includes('gmail')) {
-        console.error(
-          '[OTP] Gmail SMTP auth failed. Use an App Password. Or on Railway use RESEND_API_KEY instead (SMTP often blocked).',
-        );
-      } else {
-        console.error('[OTP] Send email failed:', err);
-      }
-      console.warn(`[OTP] Fallback - ${purpose} for ${email}: ${otp}`);
-    }
+    console.warn(`[OTP] Fallback - ${purpose} for ${email}: ${otp}`);
   }
 
   private async sendSmsOtp(
